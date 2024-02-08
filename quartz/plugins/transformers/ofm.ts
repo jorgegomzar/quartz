@@ -17,6 +17,9 @@ import { toHtml } from "hast-util-to-html"
 import { PhrasingContent } from "mdast-util-find-and-replace/lib"
 import { capitalize } from "../../util/lang"
 import { PluggableList } from "unified"
+import yaml from "js-yaml"
+import toml from "toml"
+import matter from "gray-matter"
 
 export interface Options {
   comments: boolean
