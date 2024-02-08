@@ -31,6 +31,9 @@ export interface Options {
   enableYouTubeEmbed: boolean
   enableVideoEmbed: boolean
   enableCheckbox: boolean
+  parsePropertiesWikilinks: boolean
+  delims: string
+  language: "yaml" | "toml"
 }
 
 const defaultOptions: Options = {
@@ -46,6 +49,9 @@ const defaultOptions: Options = {
   enableYouTubeEmbed: true,
   enableVideoEmbed: true,
   enableCheckbox: false,
+  parsePropertiesWikilinks: true,
+  delims: "---",
+  language: "yaml",
 }
 
 const calloutMapping = {
@@ -93,6 +99,27 @@ function canonicalizeCallout(calloutName: string): keyof typeof calloutMapping {
   const normalizedCallout = calloutName.toLowerCase() as keyof typeof calloutMapping
   // if callout is not recognized, make it a custom one
   return calloutMapping[normalizedCallout] ?? calloutName
+}
+
+function propertyLinksToRegularMarkdown(obj: { [key: string]: any }): string {
+  // Parses wikilinks from FrontMatter properties and returns a string with all.
+  let result = ""
+
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      if (
+        Array.isArray(obj[key]) &&
+        typeof obj[key][0] === "string" &&
+        obj[key][0].includes("[[")
+      ) {
+        result += `- ${key}: ${obj[key].join(", ")}\n`
+      } else if (typeof obj[key] === "string" && obj[key].includes("[[")) {
+        result += `- ${key}: ${obj[key]}\n`
+      }
+    }
+  }
+
+  return result
 }
 
 export const externalLinkRegex = /^https?:\/\//i
@@ -181,6 +208,36 @@ export const ObsidianFlavoredMarkdown: QuartzTransformerPlugin<Partial<Options> 
 
           return `${embedDisplay}[[${fp}${displayAnchor}${displayAlias}]]`
         })
+      }
+
+      // move Obsidian properties with links to the top of the file
+      if (opts.parsePropertiesWikilinks) {
+        if (src instanceof Buffer) {
+          src = src.toString()
+        }
+
+        const { data } = matter(Buffer.from(src), {
+          ...opts,
+          engines: {
+            yaml: (s) => yaml.load(s, { schema: yaml.JSON_SCHEMA }) as object,
+            toml: (s) => toml.parse(s) as object,
+          },
+        })
+        const prop_links = propertyLinksToRegularMarkdown(data)
+        if (prop_links !== "") {
+          const yaml_props = src.split(opts.delims)[1]
+          const content = src.split(opts.delims).slice(2).join(opts.delims)
+
+          src = (
+            opts.delims + "\n" +
+            yaml_props + "\n" +
+            opts.delims + "\n" +
+            prop_links + "\n" +
+            opts.delims + "\n" +
+            content
+          )
+        }
+
       }
 
       return src
